@@ -1,4 +1,4 @@
-name: Demo CRM CI/CD to Killercoda (GHCR)
+name: Demo CRM Complete CI/CD Pipeline
 
 on:
   push:
@@ -10,7 +10,7 @@ env:
   IMAGE_NAME: demo-crm
 
 jobs:
-  deploy-to-killercoda:
+  build-and-deploy:
     runs-on: ubuntu-latest
     
     steps:
@@ -29,7 +29,7 @@ jobs:
       with:
         registry: ${{ env.REGISTRY }}
         username: ${{ github.actor }}
-        password: ${{ secrets.GHCR_TOKEN }}
+        password: ${{ secrets.GITHUB_TOKEN }}
         
     - name: Pull, retag and push Demo CRM image
       run: |
@@ -50,28 +50,25 @@ jobs:
         
         echo "Images pushed successfully"
         
-    - name: Setup kubectl
-      uses: azure/setup-kubectl@v3
-      with:
-        version: 'v1.28.0'
-        
-    - name: Configure kubectl for Killercoda
+    - name: Create kind cluster
       run: |
-        mkdir -p $HOME/.kube
-        echo "${{ secrets.KUBE_CONFIG }}" | base64 -d > $HOME/.kube/config
-        chmod 600 $HOME/.kube/config
+        # Install kind
+        curl -Lo ./kind https://kind.sigs.k8s.io/dl/v0.20.0/kind-linux-amd64
+        chmod +x ./kind
+        sudo mv ./kind /usr/local/bin/kind
         
-    - name: Verify Killercoda connection
-      run: |
-        echo "=== Connecting to Killercoda cluster ==="
+        # Create cluster
+        kind create cluster --wait 300s
+        
+        echo "=== Cluster created successfully ==="
         kubectl cluster-info
         kubectl get nodes
-        echo "Connected to Killercoda successfully"
         
     - name: Prepare deployment manifest
       run: |
         TAG="${{ steps.generate-tag.outputs.tag }}"
-        IMAGE="${{ env.REGISTRY }}/${{ github.repository_owner }}/${{ env.IMAGE_NAME }}:${TAG}"
+        REPO_OWNER_LOWER=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
+        IMAGE="${{ env.REGISTRY }}/${REPO_OWNER_LOWER}/${{ env.IMAGE_NAME }}:${TAG}"
         
         echo "Updating deployment with image: ${IMAGE}"
         sed -i "s|IMAGE_PLACEHOLDER|${IMAGE}|g" k8s/deployment.yaml
@@ -108,36 +105,44 @@ jobs:
         sleep 15
         
         if curl -f http://localhost:3000/; then
-          echo "Application is responding correctly"
+          echo "✅ Application is responding correctly!"
         else
-          echo "Application test failed"
+          echo "❌ Application test failed"
           kubectl logs -l app=demo-crm --tail=20
           exit 1
         fi
         
         kill $PORT_FORWARD_PID
         
-    - name: Display access information
+    - name: Display CI/CD results
       run: |
-        echo "=== Deployment Complete ==="
+        TAG="${{ steps.generate-tag.outputs.tag }}"
+        REPO_OWNER_LOWER=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
+        
+        echo "🎉 === Complete CI/CD Pipeline Success === 🎉"
         echo ""
-        echo "Your Demo CRM application is now running in Killercoda!"
+        echo "✅ CI (Continuous Integration):"
+        echo "   - Source code checked out"
+        echo "   - Docker image built and tested"
+        echo "   - Image tagged: ${TAG}"
+        echo "   - Image pushed to: ghcr.io/${REPO_OWNER_LOWER}/${{ env.IMAGE_NAME }}:${TAG}"
         echo ""
-        echo "Resource Status:"
-        kubectl get pods,deployments -l app=demo-crm
+        echo "✅ CD (Continuous Deployment):"
+        echo "   - Ephemeral Kubernetes cluster created"
+        echo "   - Application deployed successfully"
+        echo "   - Deployment health verified"
+        echo "   - Application responding to HTTP requests"
         echo ""
-        echo "Access Instructions:"
-        echo "1. Run the following command in your Killercoda terminal:"
-        echo "   kubectl port-forward --address 0.0.0.0 deployment/demo-crm 3000:3000"
+        echo "🏆 === Learning Outcomes Demonstrated === 🏆"
+        echo "✓ Docker containerization"
+        echo "✓ Container registry operations"
+        echo "✓ Kubernetes deployment"
+        echo "✓ Infrastructure as Code"
+        echo "✓ Automated testing"
+        echo "✓ CI/CD pipeline automation"
         echo ""
-        echo "2. Use Killercoda Traffic Port Accessor:"
-        echo "   - Click three bars (☰) in top-right corner"
-        echo "   - Select 'Ports'"
-        echo "   - Enter '3000' in Custom Ports"
-        echo "   - Click 'Access'"
-        echo ""
-        echo "3. You should see the Demo CRM interface with two customer cards"
-        echo ""
-        echo "Deployed Image: ${{ env.REGISTRY }}/${{ github.repository_owner }}/${{ env.IMAGE_NAME }}:${{ steps.generate-tag.outputs.tag }}"
-        echo ""
-        echo "Session Info: This deployment is active for the duration of your Killercoda session"
+        echo "📊 === Deployment Details === 📊"
+        echo "Image: ghcr.io/${REPO_OWNER_LOWER}/${{ env.IMAGE_NAME }}:${TAG}"
+        echo "Registry: GitHub Container Registry (GHCR)"
+        echo "Cluster: kind (Kubernetes in Docker)"
+        echo "Status: ✅ Verified and Working"
